@@ -1,12 +1,7 @@
-﻿using System;
-using Agents.TCAgent;
-using Utils;
-
-namespace Agents.States.TCStates
+﻿namespace Agents.States.SecurityStates
 {
-    public class WaitState : State
+    public class PatrolState : State
     {
-
         public override BehaviourActions GetTickBehaviour(params object[] parameters)
         {
             return default;

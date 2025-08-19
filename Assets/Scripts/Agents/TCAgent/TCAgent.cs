@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Agents.States.SecurityStates;
 using Agents.States.TCStates;
 using ECS.PathfinderECS;
 using ECS.Patron;
@@ -125,7 +126,7 @@ namespace Agents.TCAgent
         protected virtual void FsmBehaviours()
         {
             Fsm.AddBehaviour<WaitState>(Behaviours.Wait, WaitTickParameters);
-            Fsm.AddBehaviour<GathererWalkState>(Behaviours.Walk, WalkTickParameters);
+            Fsm.AddBehaviour<WalkState>(Behaviours.Walk, WalkTickParameters);
         }
 
         protected virtual void FsmTransitions()
