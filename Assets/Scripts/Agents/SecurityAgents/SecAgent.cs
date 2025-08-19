@@ -59,12 +59,14 @@ namespace Agents.SecurityAgents
         public bool Retreat = false;
         public static float deltaTime = 0.1f;
 
-        [Header("Attack Settings")] public float AttackCooldown = 2f;
+        [Header("Attack Settings")]
+        public float AttackCooldown = 2f;
         public float AttackDamage = 10f;
 
-        [Header("Search Settings")] public float SearchDuration = 10f;
-        private bool _shouldMove = false;
-        private bool _stopRetreating = false;
+        [Header("Search Settings")] 
+        public float SearchDuration = 10f;
+        private readonly bool _shouldMove = false;
+        private readonly bool _stopRetreating = false;
         private NavMeshAgent _navMeshAgent;
         private int _currentPatrolIndex = 0;
         private float _lastAttackTime = 0f;
@@ -73,7 +75,6 @@ namespace Agents.SecurityAgents
         private Quaternion _originalRotation;
         private float _lookTimer = 0f;
         private bool _isLooking = false;
-        private float _currentLookAngle = 0f;
 
         protected Action _onMove;
         protected Action _onAttack;
@@ -164,7 +165,6 @@ namespace Agents.SecurityAgents
                 {
                     _isLooking = true;
                     _lookTimer = 0f;
-                    _currentLookAngle = 0f;
                 }
 
                 HandlePatrolPointWait();

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Player;
+using TMPro;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -30,14 +31,17 @@ namespace Agents.SecurityAgents
         [SerializeField] private float minPatrolPointDistance = 5f;
 
         private Dictionary<SecAgent, GameObject> _agentGameObjects = new();
+        private Dictionary<SecAgent, TextMeshPro> _agentText = new();
         private Dictionary<SecAgent, PatrolPoint[]> _agentPatrolPoints = new();
         private List<SecAgent> _activeAgents = new();
-        private Transform _currentTarget;
         private PlayerController _player;
+        private float _stateTextUpdateTimer;
+        private const float StateTextUpdateInterval = 0.25f;
+
 
         private void Awake()
         {
-            if (Instance == null)
+            if (!Instance)
             {
                 Instance = this;
             }
@@ -49,7 +53,7 @@ namespace Agents.SecurityAgents
 
         private void Start()
         {
-            _player = Object.FindObjectsByType<PlayerController>(FindObjectsInactive.Include, FindObjectsSortMode.None).FirstOrDefault();
+            _player = FindObjectsByType<PlayerController>(FindObjectsInactive.Include, FindObjectsSortMode.None).FirstOrDefault();
             InitializeAgents();
         }
 
@@ -74,8 +78,7 @@ namespace Agents.SecurityAgents
             GameObject agentObject = Instantiate(secAgentPrefab, spawnPosition, Quaternion.identity, transform);
             agentObject.name = $"SecurityAgent_{index}";
 
-            // Ensure NavMeshAgent component
-            if (agentObject.GetComponent<NavMeshAgent>() == null)
+            if (!agentObject.GetComponent<NavMeshAgent>())
             {
                 agentObject.AddComponent<NavMeshAgent>();
             }
@@ -89,15 +92,15 @@ namespace Agents.SecurityAgents
                 RetreatPoint = retreatPoint
             };
 
-            // Generate patrol points for this agent
             PatrolPoint[] agentPatrolPoints = GeneratePatrolPoints(spawnPosition);
             Transform[] patrolTransforms = agentPatrolPoints.Select(pp => pp.transform).ToArray();
-            
+
             agent.PatrolPoints = patrolTransforms;
             _agentPatrolPoints[agent] = agentPatrolPoints;
+            _agentText[agent] = agentObject.GetComponentInChildren<TextMeshPro>();
 
             agent.Init();
-            agent.Fsm.ForceTransition(Behaviours.Patrol);
+            agent.Fsm.ForceTransition(Behaviours.Retreat);
 
             _agentGameObjects[agent] = agentObject;
             _activeAgents.Add(agent);
@@ -115,6 +118,7 @@ namespace Agents.SecurityAgents
                     return hit.position;
                 }
             }
+
             return transform.position;
         }
 
@@ -126,9 +130,15 @@ namespace Agents.SecurityAgents
             for (int i = 0; i < patrolPointsPerAgent; i++)
             {
                 Vector3 patrolPosition = FindValidPatrolPoint(centerPosition, usedPositions);
+
+                GameObject pointObject = new GameObject($"PatrolPoint_{i}")
+                {
+                    transform =
+                    {
+                        position = patrolPosition
+                    }
+                };
                 
-                GameObject pointObject = new GameObject($"PatrolPoint_{i}");
-                pointObject.transform.position = patrolPosition;
                 pointObject.transform.SetParent(transform);
 
                 PatrolPoint patrolPoint = new PatrolPoint
@@ -153,7 +163,7 @@ namespace Agents.SecurityAgents
             {
                 float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
                 float distance = Random.Range(minPatrolPointDistance, patrolPointRadius);
-                
+
                 Vector3 candidate = centerPosition + new Vector3(
                     Mathf.Cos(angle) * distance,
                     0f,
@@ -179,7 +189,6 @@ namespace Agents.SecurityAgents
                 }
             }
 
-            // Fallback to center position if no valid point found
             return centerPosition;
         }
 
@@ -192,6 +201,7 @@ namespace Agents.SecurityAgents
                     return kvp.Value[index];
                 }
             }
+
             return null;
         }
 
@@ -203,13 +213,37 @@ namespace Agents.SecurityAgents
                 agent.Tick(Time.deltaTime);
                 CheckVisualDetection(agent);
             }
+
+            _stateTextUpdateTimer += Time.deltaTime;
+
+            if (_stateTextUpdateTimer < StateTextUpdateInterval) return;
+
+            _stateTextUpdateTimer = 0f;
+            Color color;
+            foreach (KeyValuePair<SecAgent, TextMeshPro> kvp in _agentText)
+            {
+                if (kvp.Key.Position && kvp.Value)
+                {
+                    color = kvp.Key.CurrentState switch
+                    {
+                        Behaviours.Patrol => Color.green,
+                        Behaviours.Chase => Color.red,
+                        Behaviours.Search => Color.yellow,
+                        Behaviours.Attack => Color.magenta,
+                        Behaviours.Retreat => Color.cyan,
+                        _ => Color.white
+                    };
+                    kvp.Value.text = kvp.Key.CurrentState.ToString();
+                    kvp.Value.color = color;
+                }
+            }
         }
+
 
         private void CheckForTargets()
         {
             if (_player)
             {
-                _currentTarget = _player.transform;
             }
         }
 
@@ -311,12 +345,10 @@ namespace Agents.SecurityAgents
 
         public void SetTarget(Transform target)
         {
-            _currentTarget = target;
         }
 
         public void ClearTarget()
         {
-            _currentTarget = null;
         }
 
         public void SetAllAgentsRetreat(bool retreat)
