@@ -176,7 +176,7 @@ namespace Agents.States.TCStates
             return currentNode == null || targetNode == null || (path != null && path.Count == 0);
         }
 
-        protected bool CheckRetreat(bool retreat, SimNode<IVector> targetNode)
+        protected new bool CheckRetreat(bool retreat, SimNode<IVector> targetNode)
         {
             return retreat && targetNode?.NodeTerrain != NodeTerrain.TownCenter &&
                    targetNode?.NodeTerrain != NodeTerrain.WatchTower;

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace Agents
 {
-    public struct BehaviourActions
+    public struct BehaviourActions : IEquatable<BehaviourActions>
     {
         public void AddMainThreadBehaviours(int executionOrder, Action behaviour)
         {
@@ -38,6 +38,21 @@ namespace Agents
         public ConcurrentDictionary<int, ConcurrentBag<Action>> MultiThreadablesBehaviour { get; private set; }
 
         public Action TransitionBehaviour { get; private set; }
+
+        public bool Equals(BehaviourActions other)
+        {
+            return Equals(MainThreadBehaviour, other.MainThreadBehaviour) && Equals(MultiThreadablesBehaviour, other.MultiThreadablesBehaviour) && Equals(TransitionBehaviour, other.TransitionBehaviour);
+        }
+
+        public override bool Equals(object obj)
+        {
+            return obj is BehaviourActions other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(MainThreadBehaviour, MultiThreadablesBehaviour, TransitionBehaviour);
+        }
     }
 
     public abstract class State

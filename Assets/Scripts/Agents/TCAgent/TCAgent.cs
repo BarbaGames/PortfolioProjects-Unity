@@ -44,13 +44,13 @@ namespace Agents.TCAgent
     {
         public static float Time;
         public TVector AcsVector;
-        protected INode<IVector>? adjacentNode;
+        protected INode<IVector> adjacentNode;
         public int CurrentFood = 3;
         public int CurrentGold = 0;
         public SimNode<IVector> CurrentNode;
 
         public Behaviours CurrentState;
-        public FSM<Behaviours, Flags> Fsm;
+        public Fsm<Behaviours, Flags> Fsm;
         protected Action OnMove;
         protected Action OnWait;
         public List<SimNode<IVector>> Path;
@@ -109,7 +109,7 @@ namespace Agents.TCAgent
 
         public virtual void Init()
         {
-            Fsm = new FSM<Behaviours, Flags>();
+            Fsm = new Fsm<Behaviours, Flags>();
             Fsm.OnStateChange += state =>
                 CurrentState = (Behaviours)Math.Clamp(state, 0, Enum.GetValues(typeof(Behaviours)).Length);
             Time = 0;

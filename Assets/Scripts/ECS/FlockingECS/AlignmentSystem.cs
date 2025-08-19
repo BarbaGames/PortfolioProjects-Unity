@@ -37,7 +37,7 @@ namespace ECS.FlockingECS
                 if (data.transform.NearBoids.Count == 0) return;
 
                 IVector avg = MyVector.zero();
-                foreach (ITransform<IVector>? b in data.transform.NearBoids)
+                foreach (ITransform<IVector> b in data.transform.NearBoids)
                     avg += b.forward;
 
                 avg /= data.transform.NearBoids.Count;

@@ -5,11 +5,11 @@ using System.Threading.Tasks;
 
 namespace Agents
 {
-    public class FSM<EnumState, EnumFlag>
-        where EnumState : Enum
-        where EnumFlag : Enum
+    public class Fsm<TEnumState, TEnumFlag>
+        where TEnumState : Enum
+        where TEnumFlag : Enum
     {
-        private const int UNNASIGNED_TRANSITION = -1;
+        private const int UnassignedTransition = -1;
         private readonly Dictionary<int, Func<object[]>> _behaviourOnEnterParameters;
         private readonly Dictionary<int, Func<object[]>> _behaviourOnExitParameters;
         private readonly Dictionary<int, State> _behaviours;
@@ -19,9 +19,9 @@ namespace Agents
 
         // Queue any transition requests that occur while a transition is in progress.
         private readonly Queue<TransitionRequest> _queuedTransitions = new();
-        private readonly (int destinationInState, Action? onTransition)[,] _transitions;
+        private readonly (int destinationInState, Action onTransition)[,] _transitions;
 
-        private readonly ParallelOptions parallelOptions = new()
+        private readonly ParallelOptions _parallelOptions = new()
         {
             MaxDegreeOfParallelism = 5
         };
@@ -30,19 +30,19 @@ namespace Agents
         private bool _isTransitioning;
         public Action<int> OnStateChange;
 
-        public FSM()
+        public Fsm()
         {
-            int states = Enum.GetValues(typeof(EnumState)).Length;
-            int flags = Enum.GetValues(typeof(EnumFlag)).Length;
+            int states = Enum.GetValues(typeof(TEnumState)).Length;
+            int flags = Enum.GetValues(typeof(TEnumFlag)).Length;
             _behaviours = new Dictionary<int, State>();
-            _transitions = new (int, Action?)[states, flags];
+            _transitions = new (int, Action)[states, flags];
 
             for (int i = 0; i < states; i++)
             for (int j = 0; j < flags; j++)
-                _transitions[i, j] = (UNNASIGNED_TRANSITION, null);
+                _transitions[i, j] = (UnassignedTransition, null);
 
             _behaviourTickParameters = new Dictionary<int, Func<object[]>>();
-            _behaviourOnEnterParameters = new Dictionary<int, Func<object[]>?>();
+            _behaviourOnEnterParameters = new Dictionary<int, Func<object[]>>();
             _behaviourOnExitParameters = new Dictionary<int, Func<object[]>>();
         }
 
@@ -130,7 +130,7 @@ namespace Agents
             }
         }
 
-        public void SetTransition(Enum originState, Enum flag, Enum destinationState, Action? onTransition = null)
+        public void SetTransition(Enum originState, Enum flag, Enum destinationState, Action onTransition = null)
         {
             lock (_fsmLock)
             {
@@ -139,10 +139,10 @@ namespace Agents
             }
         }
 
-        public void AddBehaviour<T>(EnumState stateIndexEnum,
-            Func<object[]>? onTickParameters = null,
-            Func<object[]>? onEnterParameters = null,
-            Func<object[]>? onExitParameters = null)
+        public void AddBehaviour<T>(TEnumState stateIndexEnum,
+            Func<object[]> onTickParameters = null,
+            Func<object[]> onEnterParameters = null,
+            Func<object[]> onExitParameters = null)
             where T : State, new()
         {
             int stateIndex = Convert.ToInt32(stateIndexEnum);
@@ -207,7 +207,7 @@ namespace Agents
             }
 
             (int destinationInState, Action onTransition) transition = _transitions[currentState, flagInt];
-            if (transition.destinationInState == UNNASIGNED_TRANSITION)
+            if (transition.destinationInState == UnassignedTransition)
                 return;
 
             // Execute exit behaviours for the current state.
@@ -259,7 +259,7 @@ namespace Agents
             ExecuteBehaviour(exitBehaviours, true);
 
             int forcedState = Convert.ToInt32(state);
-            if (forcedState == UNNASIGNED_TRANSITION)
+            if (forcedState == UnassignedTransition)
                 return;
 
             // Change state.
@@ -412,7 +412,7 @@ namespace Agents
 
         public void ExecuteMultiThreadBehaviours(BehaviourActions behaviourActions, int executionOrder)
         {
-            ConcurrentDictionary<int, ConcurrentBag<Action>>? multiThreadables;
+            ConcurrentDictionary<int, ConcurrentBag<Action>> multiThreadables;
             multiThreadables = behaviourActions.MultiThreadablesBehaviour;
             if (multiThreadables == null)
                 return;
@@ -436,7 +436,7 @@ namespace Agents
             {
                 // For multiple actions, convert to an array and use Parallel.For.
                 Action[] actionsArray = actions.ToArray();
-                Parallel.For(0, actionsArray.Length, parallelOptions, i => { actionsArray[i]?.Invoke(); });
+                Parallel.For(0, actionsArray.Length, _parallelOptions, i => { actionsArray[i]?.Invoke(); });
             }
 
             // Remove the executed actions to free references.

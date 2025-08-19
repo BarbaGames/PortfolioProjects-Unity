@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using Agents.States.AnimalStates;
 using Utils;
 
@@ -31,7 +30,7 @@ namespace Agents.AnimalAgents
         public static float Time = 0;
 
         protected NodeTerrain foodTarget;
-        public FSM<Behaviours, Flags> Fsm;
+        public Fsm<Behaviours, Flags> Fsm;
         public float[][] input;
         private float maxX;
         private float maxY;

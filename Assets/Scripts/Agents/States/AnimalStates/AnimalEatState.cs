@@ -20,10 +20,10 @@ namespace Agents.States.AnimalStates
 
             behaviours.AddMultiThreadableBehaviours(0, () =>
             {
-                if (foodTarget == null || currentNode == null || onEat == null) return;
+                if (currentNode == null || onEat == null) return;
                 if (currentNode.Resource <= 0 || foodTarget != currentNode.NodeType) return;
 
-                onEat?.Invoke();
+                onEat.Invoke();
             });
 
             behaviours.SetTransitionBehaviour(() =>
@@ -34,7 +34,7 @@ namespace Agents.States.AnimalStates
                     return;
                 }
 
-                if (outputBrain1 != null && outputBrain1[0] > 0.5f && currentNode != null &&
+                if (outputBrain1 != null && outputBrain1[0] > 0.5f &&
                     currentNode.NodeType == foodTarget)
                 {
                     OnFlag?.Invoke(Flags.OnEat);

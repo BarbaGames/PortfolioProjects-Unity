@@ -41,12 +41,12 @@ namespace ECS.FlockingECS
         {
             Parallel.ForEach(queriedEntities, GetParallelOptions(), boidId =>
             {
-                BoidConfigComponent? boidConfig = boidConfigComponents[boidId];
+                BoidConfigComponent boidConfig = boidConfigComponents[boidId];
                 float detectionRadiusSquared = boidConfig.detectionRadius * boidConfig.detectionRadius;
                 IVector boidPosition = transformComponents[boidId].Transform.position;
 
                 List<ITransform<IVector>> nearBoids = new List<ITransform<IVector>>();
-                foreach ((uint nearId, IVector? nearPos, ITransform<IVector> nearTransform) in boidData)
+                foreach ((uint nearId, IVector nearPos, ITransform<IVector> nearTransform) in boidData)
                 {
                     if (boidId == nearId || nearPos == null) continue;
 

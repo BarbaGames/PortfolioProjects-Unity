@@ -15,7 +15,7 @@ namespace Agents.States.TCStates
             int gold = Convert.ToInt32(parameters[2]);
             int wood = Convert.ToInt32(parameters[3]);
             Action OnBuild = parameters[4] as Action;
-            SimNode<IVector> targetNode = (SimNode<IVector>?)parameters[5];
+            SimNode<IVector> targetNode = (SimNode<IVector>)parameters[5];
 
             behaviours.AddMultiThreadableBehaviours(0, () => { OnBuild?.Invoke(); });
 

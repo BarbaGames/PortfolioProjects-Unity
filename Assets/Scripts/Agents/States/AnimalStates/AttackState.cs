@@ -11,7 +11,7 @@ namespace Agents.States.AnimalStates
 
             BehaviourActions behaviours = new BehaviourActions();
 
-            Action? onAttack = parameters[0] as Action;
+            Action onAttack = parameters[0] as Action;
             float[] outputBrain1 = (float[])parameters[1];
             float[] outputBrain2 = (float[])parameters[2];
 
