@@ -5,7 +5,7 @@ namespace Player
 {
     public class PlayerController : MonoBehaviour
     {
-        [Header("Movement Settings")]
+        [Header("Movement Settings")] 
         [SerializeField] private float walkSpeed = 3f;
         [SerializeField] private float sprintSpeed = 6f;
         [SerializeField] private float crouchSpeed = 1.5f;
@@ -18,8 +18,8 @@ namespace Player
 
         private CharacterController _characterController;
         private Vector3 _originalScale;
-        private bool _isCrouching = false;
-        private bool _isSprinting = false;
+        private bool _isCrouching;
+        private bool _isSprinting;
         private Vector3 _velocity;
         private float _currentSpeed;
         private float _currentNoiseRadius;
@@ -30,11 +30,39 @@ namespace Player
         public float CurrentNoiseRadius => _currentNoiseRadius;
         public Vector3 Position => transform.position;
 
+        [Header("Debug & Quality of Life")] 
+        [SerializeField] private bool showDebugInfo = true;
+        [SerializeField] private bool showMovementGizmos = true;
+        [SerializeField] private KeyCode sprintKey = KeyCode.LeftShift;
+        [SerializeField] private KeyCode crouchKey = KeyCode.LeftControl;
+
+        [Header("Audio Feedback")] 
+        [SerializeField] private AudioClip walkSound;
+        [SerializeField] private AudioClip sprintSound;
+        [SerializeField] private AudioClip crouchSound;
+
+        private AudioSource _audioSource;
+        private Vector3 _lastNoisePosition;
+        private float _noiseTimer = 0f;
+        private const float NoiseInterval = 0.5f;
+
+        // Movement state tracking
+        private float _movementStateChangeTime;
+        private bool _wasMoving;
+
         private void Start()
         {
             _characterController = GetComponent<CharacterController>();
+            _audioSource = GetComponent<AudioSource>();
+
+            if (_audioSource == null)
+                _audioSource = gameObject.AddComponent<AudioSource>();
+
             _originalScale = transform.localScale;
             UpdateMovementState();
+
+            if (showDebugInfo)
+                Debug.Log("Player Controller initialized");
         }
 
         private void Update()
@@ -42,28 +70,106 @@ namespace Player
             HandleInput();
             HandleMovement();
             UpdateNoiseRadius();
-
-            // Notify SecurityManager about player noise
-            if (IsMoving)
-            {
-                SecurityManager.Instance?.OnPlayerNoise(Position, _currentNoiseRadius);
-            }
+            HandleAudioFeedback();
+            NotifySecurityManager();
+            UpdateDebugInfo();
         }
 
         private void HandleInput()
         {
-            // Crouch input
-            if (Input.GetKeyDown(KeyCode.LeftControl))
+            // More flexible input handling
+            bool crouchInput = Input.GetKey(crouchKey);
+            bool sprintInput = Input.GetKey(sprintKey);
+
+            // Handle crouch toggle vs hold
+            if (Input.GetKeyDown(crouchKey))
             {
                 _isCrouching = !_isCrouching;
-                UpdateCrouchState();
+                _movementStateChangeTime = Time.time;
+
+                if (showDebugInfo)
+                    Debug.Log($"Crouch {(_isCrouching ? "enabled" : "disabled")}");
             }
 
-            // Sprint input
-            _isSprinting = Input.GetKey(KeyCode.LeftShift) && !_isCrouching;
+            // Sprint only works when not crouching
+            bool wasSprinting = _isSprinting;
+            _isSprinting = sprintInput && !_isCrouching;
+
+            if (_isSprinting != wasSprinting)
+            {
+                _movementStateChangeTime = Time.time;
+                if (showDebugInfo)
+                    Debug.Log($"Sprint {(_isSprinting ? "enabled" : "disabled")}");
+            }
 
             UpdateMovementState();
         }
+
+        private void HandleAudioFeedback()
+        {
+            if (!_audioSource || !IsMoving) return;
+
+            AudioClip soundToPlay = null;
+
+            if (_isCrouching && crouchSound)
+                soundToPlay = crouchSound;
+            else if (_isSprinting && sprintSound)
+                soundToPlay = sprintSound;
+            else if (walkSound)
+                soundToPlay = walkSound;
+
+            if (soundToPlay && !_audioSource.isPlaying)
+            {
+                _audioSource.clip = soundToPlay;
+                _audioSource.volume = _isCrouching ? 0.3f : (_isSprinting ? 0.8f : 0.5f);
+                _audioSource.Play();
+            }
+        }
+
+        private void NotifySecurityManager()
+        {
+            // Optimize noise notifications
+            _noiseTimer += Time.deltaTime;
+
+            if (IsMoving && _noiseTimer >= NoiseInterval)
+            {
+                if (Vector3.Distance(Position, _lastNoisePosition) > 1f)
+                {
+                    SecurityManager.Instance?.OnPlayerNoise(Position, _currentNoiseRadius);
+                    _lastNoisePosition = Position;
+                    _noiseTimer = 0f;
+                }
+            }
+        }
+
+        private void UpdateDebugInfo()
+        {
+            if (!showDebugInfo) return;
+
+            // Track movement state changes
+            if (IsMoving != _wasMoving)
+            {
+                Debug.Log($"Player movement: {(IsMoving ? "started" : "stopped")} " +
+                          $"(Speed: {_currentSpeed:F1}, Noise: {_currentNoiseRadius:F1})");
+                _wasMoving = IsMoving;
+            }
+        }
+
+        // Enhanced movement state info
+        public string GetMovementStateInfo()
+        {
+            string state = "Standing";
+            if (IsMoving)
+            {
+                if (_isCrouching) state = "Crouching";
+                else if (_isSprinting) state = "Sprinting";
+                else state = "Walking";
+            }
+
+            return $"{state} (Speed: {_currentSpeed:F1}, Noise: {_currentNoiseRadius:F1})";
+        }
+
+       
 
         private void HandleMovement()
         {
@@ -147,14 +253,43 @@ namespace Player
                 _currentNoiseRadius = walkNoiseRadius;
             }
         }
-
+        
+        
         private void OnDrawGizmosSelected()
         {
+            if (!showMovementGizmos) return;
+
+            // Show noise radius
             if (IsMoving)
             {
-                Gizmos.color = Color.red;
+                Gizmos.color = _isCrouching ? Color.green : (_isSprinting ? Color.red : Color.yellow);
                 Gizmos.DrawWireSphere(transform.position, _currentNoiseRadius);
+
+                // Show movement direction
+                Vector3 moveDir = new Vector3(Input.GetAxis("Horizontal"), 0, Input.GetAxis("Vertical"));
+                if (moveDir.magnitude > 0.1f)
+                {
+                    Gizmos.color = Color.blue;
+                    Gizmos.DrawRay(transform.position, moveDir.normalized * 2f);
+                }
             }
+        }
+
+        private void OnGUI()
+        {
+            if (!showDebugInfo) return;
+
+            GUILayout.BeginArea(new Rect(Screen.width - 250, 10, 240, 150));
+            GUILayout.Label("=== Player Debug ===");
+            GUILayout.Label($"State: {GetMovementStateInfo()}");
+            GUILayout.Label($"Position: {Position}");
+            GUILayout.Label($"Grounded: {_characterController.isGrounded}");
+
+            GUILayout.Label("Controls:");
+            GUILayout.Label($"Crouch: {crouchKey}");
+            GUILayout.Label($"Sprint: {sprintKey}");
+
+            GUILayout.EndArea();
         }
     }
 }

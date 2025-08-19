@@ -2,8 +2,10 @@ using System;
 using System.Collections;
 using Agents.States.SecurityStates;
 using Player;
+using TMPro;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.UIElements;
 
 namespace Agents.SecurityAgents
 {
@@ -34,7 +36,7 @@ namespace Agents.SecurityAgents
     {
         public Transform transform;
         public float waitSeconds = 1.5f;
-        public bool lookAround = false;
+        public bool lookAround;
         public float lookAngle = 60f;
         public float lookSpeed = 120f;
         public Vector3 faceDirection;
@@ -46,6 +48,8 @@ namespace Agents.SecurityAgents
         public Behaviours CurrentState;
         public Transform Position;
         public Transform Target;
+        
+        [Header("Patrol Settings")] 
         public float DetectionRange = 10f;
         public float MaxChaseDistance = 20f;
         public float ReachDistance = 2f;
@@ -57,9 +61,8 @@ namespace Agents.SecurityAgents
         public Transform RetreatPoint;
         public Transform LastKnownPosition;
         public bool Retreat = false;
-        public static float deltaTime = 0.1f;
 
-        [Header("Attack Settings")]
+        [Header("Attack Settings")] 
         public float AttackCooldown = 2f;
         public float AttackDamage = 10f;
 
@@ -68,31 +71,51 @@ namespace Agents.SecurityAgents
         private readonly bool _shouldMove = false;
         private readonly bool _stopRetreating = false;
         private NavMeshAgent _navMeshAgent;
-        private int _currentPatrolIndex = 0;
-        private float _lastAttackTime = 0f;
-        private float _searchStartTime = 0f;
+        private int _currentPatrolIndex;
+        private float _lastAttackTime;
+        private float _searchStartTime;
         private Vector3 _spawnPosition;
         private Quaternion _originalRotation;
-        private float _lookTimer = 0f;
-        private bool _isLooking = false;
+        private float _lookTimer;
+        private bool _isLooking;
 
         protected Action _onMove;
         protected Action _onAttack;
 
+        [Header("Debug Settings")]
+        public bool ShowDebugInfo = true;
+        public bool ShowPatrolPath = true;
+        public bool ShowVisionCone = true;
+
+        private TextMeshPro _stateText;
+        private float _stateTextUpdateTimer = 0f;
+        private const float StateTextUpdateInterval = 0.25f;
+
+        // Movement optimization
+        private Vector3 _lastDestination = Vector3.zero;
+        private const float DestinationThreshold = 0.5f;
+
+        // State tracking for debugging
+        private Behaviours _previousState;
+        private float _stateChangeTime;
+
         public virtual void Init()
         {
             _navMeshAgent = Position.GetComponent<NavMeshAgent>();
-            if (_navMeshAgent == null)
-            {
+            if (!_navMeshAgent)
                 _navMeshAgent = Position.gameObject.AddComponent<NavMeshAgent>();
+
+            _stateText = Position.GetComponentInChildren<TextMeshPro>();
+            if (!_stateText)
+            {
+                Debug.LogWarning($"No TextMeshPro found on {Position.name} - state display will not work");
             }
 
             _spawnPosition = Position.position;
             _originalRotation = Position.rotation;
 
             Fsm = new Fsm<Behaviours, Flags>();
-            Fsm.OnStateChange += state =>
-                CurrentState = (Behaviours)Math.Clamp(state, 0, Enum.GetValues(typeof(Behaviours)).Length);
+            Fsm.OnStateChange += OnStateChanged;
 
             _onMove += Move;
             _onAttack += Attack;
@@ -100,17 +123,96 @@ namespace Agents.SecurityAgents
             AddFsmBehaviours();
             FsmTransitions();
         }
-
-        public virtual void Tick(float deltaTime)
+        
+        public virtual void Tick()
         {
             Fsm.Tick();
+            UpdateStateDisplay();
         }
-
+        
         public void Reset()
         {
-            Fsm.OnStateChange -= state =>
-                CurrentState = (Behaviours)Math.Clamp(state, 0, Enum.GetValues(typeof(Behaviours)).Length);
-            Fsm.ForceTransition(Behaviours.None);
+            if (Fsm != null)
+            {
+                Fsm.OnStateChange -= OnStateChanged;
+                Fsm.ForceTransition(Behaviours.None);
+            }
+
+            if (_navMeshAgent && _navMeshAgent.isActiveAndEnabled)
+            {
+                _navMeshAgent.ResetPath();
+                _navMeshAgent.isStopped = true;
+            }
+
+            Target = null;
+            LastKnownPosition = null;
+            _searchStartTime = 0f;
+            _lastAttackTime = 0f;
+        }
+        
+        private void OnStateChanged(int newState)
+        {
+            _previousState = CurrentState;
+            CurrentState = (Behaviours)Math.Clamp(newState, 0, Enum.GetValues(typeof(Behaviours)).Length);
+            _stateChangeTime = Time.time;
+
+            if (ShowDebugInfo)
+            {
+                Debug.Log($"Agent {Position.name}: {_previousState} -> {CurrentState} at {_stateChangeTime:F2}s");
+            }
+        }
+
+        private void UpdateStateDisplay()
+        {
+            _stateTextUpdateTimer += Time.deltaTime;
+            if (!(_stateTextUpdateTimer >= StateTextUpdateInterval) || !_stateText) return;
+            _stateTextUpdateTimer = 0f;
+
+            Color stateColor = CurrentState switch
+            {
+                Behaviours.Patrol => Color.green,
+                Behaviours.Chase => Color.red,
+                Behaviours.Search => Color.yellow,
+                Behaviours.Attack => Color.magenta,
+                Behaviours.Retreat => Color.cyan,
+                Behaviours.Wait => Color.blue,
+                _ => Color.white
+            };
+
+            _stateText.text = $"{CurrentState}\n{GetStateTimer():F1}s";
+            _stateText.color = stateColor;
+        }
+
+        private float GetStateTimer()
+        {
+            return Time.time - _stateChangeTime;
+        }
+
+        public bool IsValidState()
+        {
+            return _navMeshAgent && Position && Fsm != null;
+        }
+
+        public void EmergencyStop()
+        {
+            if (_navMeshAgent)
+            {
+                _navMeshAgent.isStopped = true;
+                _navMeshAgent.ResetPath();
+            }
+
+            if (ShowDebugInfo)
+            {
+                Debug.Log($"Emergency stop called for agent {Position.name}");
+            }
+        }
+
+        public void Resume()
+        {
+            if (_navMeshAgent)
+            {
+                _navMeshAgent.isStopped = false;
+            }
         }
 
         protected virtual void AddFsmBehaviours()
@@ -125,6 +227,7 @@ namespace Agents.SecurityAgents
             Fsm.AddBehaviour<WaitState>(Behaviours.None, WaitTickParameters);
         }
 
+        #region Movement
 
         protected virtual void Move()
         {
@@ -152,12 +255,20 @@ namespace Agents.SecurityAgents
 
         private void HandlePatrolMovement()
         {
-            if (PatrolPoints == null || PatrolPoints.Length == 0) return;
+            if (PatrolPoints == null || PatrolPoints.Length == 0)
+            {
+                Debug.LogWarning($"Agent {Position.name} has no patrol points assigned!");
+                return;
+            }
 
             Transform currentPatrolPoint = PatrolPoints[_currentPatrolIndex];
-            if (currentPatrolPoint == null) return;
+            if (currentPatrolPoint == null)
+            {
+                Debug.LogError($"Patrol point {_currentPatrolIndex} is null for agent {Position.name}");
+                return;
+            }
 
-            _navMeshAgent.SetDestination(currentPatrolPoint.position);
+            SetDestinationOptimized(currentPatrolPoint.position);
 
             if (!_navMeshAgent.pathPending && _navMeshAgent.remainingDistance < ReachDistance)
             {
@@ -165,9 +276,23 @@ namespace Agents.SecurityAgents
                 {
                     _isLooking = true;
                     _lookTimer = 0f;
+
+                    if (ShowDebugInfo)
+                    {
+                        Debug.Log($"Agent {Position.name} reached patrol point {_currentPatrolIndex}");
+                    }
                 }
 
                 HandlePatrolPointWait();
+            }
+        }
+
+        private void SetDestinationOptimized(Vector3 destination)
+        {
+            if (Vector3.Distance(destination, _lastDestination) > DestinationThreshold)
+            {
+                _navMeshAgent.SetDestination(destination);
+                _lastDestination = destination;
             }
         }
 
@@ -252,9 +377,11 @@ namespace Agents.SecurityAgents
             }
         }
 
+        #endregion
+        
         protected virtual void Attack()
         {
-            if (Target == null) return;
+            if (!Target) return;
             if (Time.time - _lastAttackTime < AttackCooldown) return;
 
             float distanceToTarget = Vector3.Distance(Position.position, Target.position);

@@ -8,11 +8,11 @@ namespace ECS.FlockingECS
 {
     public class BoidRadarSystem : EcsSystem
     {
-        private IDictionary<uint, AcsComponent> ACSComponents = null;
-        private IDictionary<uint, BoidConfigComponent> boidConfigComponents = null;
+        private IDictionary<uint, AcsComponent> ACSComponents;
+        private IDictionary<uint, BoidConfigComponent> boidConfigComponents;
         private List<(uint id, IVector position, ITransform<IVector> transform)> boidData;
-        private IEnumerable<uint> queriedEntities = null;
-        private IDictionary<uint, TransformComponent> transformComponents = null;
+        private IEnumerable<uint> queriedEntities;
+        private IDictionary<uint, TransformComponent> transformComponents;
 
         public override void Initialize()
         {

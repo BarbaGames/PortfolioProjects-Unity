@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using Player;
-using TMPro;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -30,13 +29,25 @@ namespace Agents.SecurityAgents
         [SerializeField] private int patrolPointsPerAgent = 4;
         [SerializeField] private float minPatrolPointDistance = 5f;
 
-        private Dictionary<SecAgent, GameObject> _agentGameObjects = new();
-        private Dictionary<SecAgent, TextMeshPro> _agentText = new();
-        private Dictionary<SecAgent, PatrolPoint[]> _agentPatrolPoints = new();
-        private List<SecAgent> _activeAgents = new();
+        [Header("Debug & Quality of Life")] 
+        [SerializeField] private bool showDebugInfo = true;
+        [SerializeField] private bool autoSpawnAgents = true;
+        [SerializeField] private bool pauseAllAgents = false;
+        [SerializeField] private KeyCode emergencyStopKey = KeyCode.P;
+        [SerializeField] private KeyCode resumeKey = KeyCode.R;
+
+        [Header("Performance")] 
+        [SerializeField] private int maxAgentsUpdatedPerFrame = 2;
+        [SerializeField] private float detectionCheckInterval = 0.1f;
+
+        private readonly Dictionary<SecAgent, float> _agentPerformanceMetrics = new();
+        private readonly Dictionary<SecAgent, GameObject> _agentGameObjects = new();
+        private readonly Dictionary<SecAgent, PatrolPoint[]> _agentPatrolPoints = new();
+        private readonly List<SecAgent> _activeAgents = new();
         private PlayerController _player;
-        private float _stateTextUpdateTimer;
-        private const float StateTextUpdateInterval = 0.25f;
+        private bool _allAgentsPaused = false;
+        private int _currentAgentUpdateIndex = 0;
+        private float _detectionTimer = 0f;
 
 
         private void Awake()
@@ -53,14 +64,17 @@ namespace Agents.SecurityAgents
 
         private void Start()
         {
-            _player = FindObjectsByType<PlayerController>(FindObjectsInactive.Include, FindObjectsSortMode.None).FirstOrDefault();
+            _player = FindObjectsByType<PlayerController>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+                .FirstOrDefault();
             InitializeAgents();
         }
 
         private void Update()
         {
-            UpdateAgents();
+            HandleDebugInput();
+            UpdateAgentsOptimized();
             CheckForTargets();
+            UpdatePerformanceMetrics();
         }
 
         private void InitializeAgents()
@@ -71,40 +85,120 @@ namespace Agents.SecurityAgents
             }
         }
 
-        private void CreateAgent(int index)
+        private void CreateAgent(int index, Vector3? customPosition = null)
         {
-            Vector3 spawnPosition = GetValidSpawnPosition();
+            Vector3 spawnPosition = customPosition ?? GetValidSpawnPosition();
 
-            GameObject agentObject = Instantiate(secAgentPrefab, spawnPosition, Quaternion.identity, transform);
-            agentObject.name = $"SecurityAgent_{index}";
-
-            if (!agentObject.GetComponent<NavMeshAgent>())
+            if (!IsValidSpawnPosition(spawnPosition))
             {
-                agentObject.AddComponent<NavMeshAgent>();
+                Debug.LogError($"Invalid spawn position for agent {index}: {spawnPosition}");
+                return;
             }
 
-            SecAgent agent = new SecAgent
+            try
             {
-                Position = agentObject.transform,
-                DetectionRange = globalDetectionRange,
-                AttackRange = globalAttackRange,
-                SearchRadius = globalSearchRadius,
-                RetreatPoint = retreatPoint
-            };
+                GameObject agentObject = Instantiate(secAgentPrefab, spawnPosition, Quaternion.identity, transform);
+                agentObject.name = $"SecurityAgent_{index}";
 
-            PatrolPoint[] agentPatrolPoints = GeneratePatrolPoints(spawnPosition);
-            Transform[] patrolTransforms = agentPatrolPoints.Select(pp => pp.transform).ToArray();
+                // Validate NavMeshAgent
+                NavMeshAgent navAgent = agentObject.GetComponent<NavMeshAgent>();
+                if (navAgent == null)
+                {
+                    navAgent = agentObject.AddComponent<NavMeshAgent>();
+                }
 
-            agent.PatrolPoints = patrolTransforms;
-            _agentPatrolPoints[agent] = agentPatrolPoints;
-            _agentText[agent] = agentObject.GetComponentInChildren<TextMeshPro>();
+                SecAgent agent = new SecAgent
+                {
+                    Position = agentObject.transform,
+                    DetectionRange = globalDetectionRange,
+                    AttackRange = globalAttackRange,
+                    SearchRadius = globalSearchRadius,
+                    RetreatPoint = retreatPoint,
+                    ShowDebugInfo = showDebugInfo
+                };
 
-            agent.Init();
-            agent.Fsm.ForceTransition(Behaviours.Retreat);
+                // Generate and assign patrol points
+                PatrolPoint[] agentPatrolPoints = GeneratePatrolPoints(spawnPosition);
+                Transform[] patrolTransforms = agentPatrolPoints.Select(pp => pp.transform).ToArray();
 
-            _agentGameObjects[agent] = agentObject;
-            _activeAgents.Add(agent);
+                agent.PatrolPoints = patrolTransforms;
+                _agentPatrolPoints[agent] = agentPatrolPoints;
+
+                agent.Init();
+                agent.Fsm.ForceTransition(Behaviours.Patrol);
+
+                _agentGameObjects[agent] = agentObject;
+                _activeAgents.Add(agent);
+                _agentPerformanceMetrics[agent] = 0f;
+
+                if (showDebugInfo)
+                {
+                    Debug.Log($"Successfully created agent {index} at {spawnPosition}");
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"Failed to create agent {index}: {e.Message}");
+            }
         }
+
+        private bool IsValidSpawnPosition(Vector3 position)
+        {
+            return NavMesh.SamplePosition(position, out NavMeshHit hit, 2f, NavMesh.AllAreas);
+        }
+
+        // Enhanced noise detection with distance falloff
+        public void OnPlayerNoise(Vector3 noisePosition, float noiseRadius)
+        {
+            int agentsAlerted = 0;
+
+            foreach (SecAgent agent in _activeAgents)
+            {
+                if (!agent.Position) continue;
+
+                float distanceToNoise = Vector3.Distance(agent.Position.position, noisePosition);
+
+                if (distanceToNoise <= noiseRadius)
+                {
+                    // Add distance-based alertness (closer = more urgent)
+                    float alertLevel = 1f - (distanceToNoise / noiseRadius);
+
+                    agent.LastKnownPosition = CreateTempTransform(noisePosition);
+
+                    if (agent.CurrentState == Behaviours.Patrol)
+                    {
+                        agent.Fsm.SendInput(Flags.OnTargetLost);
+                        agentsAlerted++;
+                    }
+                }
+            }
+
+            if (showDebugInfo && agentsAlerted > 0)
+            {
+                Debug.Log($"Player noise alerted {agentsAlerted} agents at {noisePosition}");
+            }
+        }
+
+        // Add agent statistics
+        public void LogAgentStatistics()
+        {
+            var stateCount = new Dictionary<Behaviours, int>();
+
+            foreach (SecAgent agent in _activeAgents)
+            {
+                if (stateCount.ContainsKey(agent.CurrentState))
+                    stateCount[agent.CurrentState]++;
+                else
+                    stateCount[agent.CurrentState] = 1;
+            }
+
+            Debug.Log("=== Agent Statistics ===");
+            foreach (var kvp in stateCount)
+            {
+                Debug.Log($"{kvp.Key}: {kvp.Value} agents");
+            }
+        }
+
 
         private Vector3 GetValidSpawnPosition()
         {
@@ -138,7 +232,7 @@ namespace Agents.SecurityAgents
                         position = patrolPosition
                     }
                 };
-                
+
                 pointObject.transform.SetParent(transform);
 
                 PatrolPoint patrolPoint = new PatrolPoint
@@ -205,40 +299,114 @@ namespace Agents.SecurityAgents
             return null;
         }
 
-        private void UpdateAgents()
+        private void HandleDebugInput()
         {
-            SecAgent.deltaTime = Time.deltaTime;
-            foreach (SecAgent agent in _activeAgents)
+            if (Input.GetKeyDown(emergencyStopKey))
             {
-                agent.Tick(Time.deltaTime);
-                CheckVisualDetection(agent);
+                TogglePauseAllAgents();
             }
 
-            _stateTextUpdateTimer += Time.deltaTime;
-
-            if (_stateTextUpdateTimer < StateTextUpdateInterval) return;
-
-            _stateTextUpdateTimer = 0f;
-            Color color;
-            foreach (KeyValuePair<SecAgent, TextMeshPro> kvp in _agentText)
+            if (Input.GetKeyDown(resumeKey))
             {
-                if (kvp.Key.Position && kvp.Value)
+                ResumeAllAgents();
+            }
+
+            // Quick agent count adjustment
+            if (Input.GetKeyDown(KeyCode.Plus) || Input.GetKeyDown(KeyCode.KeypadPlus))
+            {
+                if (_activeAgents.Count < maxAgents)
                 {
-                    color = kvp.Key.CurrentState switch
-                    {
-                        Behaviours.Patrol => Color.green,
-                        Behaviours.Chase => Color.red,
-                        Behaviours.Search => Color.yellow,
-                        Behaviours.Attack => Color.magenta,
-                        Behaviours.Retreat => Color.cyan,
-                        _ => Color.white
-                    };
-                    kvp.Value.text = kvp.Key.CurrentState.ToString();
-                    kvp.Value.color = color;
+                    Vector3 spawnPos = GetValidSpawnPosition();
+                    CreateAgent(_activeAgents.Count, spawnPos);
+                }
+            }
+
+            if (Input.GetKeyDown(KeyCode.Minus) || Input.GetKeyDown(KeyCode.KeypadMinus))
+            {
+                if (_activeAgents.Count > 0)
+                {
+                    RemoveAgent(_activeAgents[^1]);
                 }
             }
         }
 
+        private void UpdateAgentsOptimized()
+        {
+            if (_activeAgents.Count == 0 || _allAgentsPaused) return;
+            
+            int agentsToUpdate = Mathf.Min(maxAgentsUpdatedPerFrame, _activeAgents.Count);
+
+            for (int i = 0; i < agentsToUpdate; i++)
+            {
+                if (_currentAgentUpdateIndex >= _activeAgents.Count)
+                    _currentAgentUpdateIndex = 0;
+
+                SecAgent agent = _activeAgents[_currentAgentUpdateIndex];
+                if (agent.IsValidState())
+                {
+                    float startTime = Time.realtimeSinceStartup;
+                    agent.Tick();
+                    _agentPerformanceMetrics[agent] = Time.realtimeSinceStartup - startTime;
+                }
+
+                _currentAgentUpdateIndex++;
+            }
+
+            _detectionTimer += Time.deltaTime;
+            if (_detectionTimer >= detectionCheckInterval)
+            {
+                _detectionTimer = 0f;
+                foreach (SecAgent agent in _activeAgents)
+                {
+                    CheckVisualDetection(agent);
+                }
+            }
+        }
+
+        private void UpdatePerformanceMetrics()
+        {
+            if (!showDebugInfo) return;
+
+            // Show performance info in console every 5 seconds
+            if (Time.time % 5f < Time.deltaTime)
+            {
+                float avgPerformance = _agentPerformanceMetrics.Values.Average();
+                Debug.Log(
+                    $"Security Manager: {_activeAgents.Count} agents, avg update time: {avgPerformance * 1000f:F2}ms");
+            }
+        }
+
+        public void TogglePauseAllAgents()
+        {
+            _allAgentsPaused = !_allAgentsPaused;
+
+            foreach (SecAgent agent in _activeAgents)
+            {
+                if (_allAgentsPaused)
+                    agent.EmergencyStop();
+                else
+                    agent.Resume();
+            }
+
+            if (showDebugInfo)
+            {
+                Debug.Log($"All agents {(_allAgentsPaused ? "paused" : "resumed")}");
+            }
+        }
+
+        public void ResumeAllAgents()
+        {
+            _allAgentsPaused = false;
+            foreach (SecAgent agent in _activeAgents)
+            {
+                agent.Resume();
+            }
+
+            if (showDebugInfo)
+            {
+                Debug.Log("All agents resumed");
+            }
+        }
 
         private void CheckForTargets()
         {
@@ -281,30 +449,16 @@ namespace Agents.SecurityAgents
             return !Physics.Raycast(ray, distance, obstacleLayerMask);
         }
 
-        public void OnPlayerNoise(Vector3 noisePosition, float noiseRadius)
-        {
-            foreach (SecAgent agent in _activeAgents)
-            {
-                if (!agent.Position) continue;
-
-                float distanceToNoise = Vector3.Distance(agent.Position.position, noisePosition);
-
-                if (distanceToNoise <= noiseRadius)
-                {
-                    agent.LastKnownPosition = CreateTempTransform(noisePosition);
-
-                    if (agent.CurrentState == Behaviours.Patrol)
-                    {
-                        agent.Fsm.SendInput(Flags.OnTargetLost);
-                    }
-                }
-            }
-        }
 
         private Transform CreateTempTransform(Vector3 position)
         {
-            GameObject tempObject = new GameObject("TempSearchTarget");
-            tempObject.transform.position = position;
+            GameObject tempObject = new GameObject("TempSearchTarget")
+            {
+                transform =
+                {
+                    position = position
+                }
+            };
             return tempObject.transform;
         }
 
@@ -334,21 +488,11 @@ namespace Agents.SecurityAgents
 
         public void RemoveAgent(SecAgent agent)
         {
-            if (_agentGameObjects.TryGetValue(agent, out GameObject agentObject))
-            {
-                agent.Reset();
-                _activeAgents.Remove(agent);
-                _agentGameObjects.Remove(agent);
-                Destroy(agentObject);
-            }
-        }
-
-        public void SetTarget(Transform target)
-        {
-        }
-
-        public void ClearTarget()
-        {
+            if (!_agentGameObjects.TryGetValue(agent, out GameObject agentObject)) return;
+            agent.Reset();
+            _activeAgents.Remove(agent);
+            _agentGameObjects.Remove(agent);
+            Destroy(agentObject);
         }
 
         public void SetAllAgentsRetreat(bool retreat)
@@ -398,13 +542,11 @@ namespace Agents.SecurityAgents
                 Gizmos.color = Color.blue;
                 for (int i = 0; i < patrolPoints.Length; i++)
                 {
-                    if (patrolPoints[i] != null)
+                    if (!patrolPoints[i]) continue;
+                    int nextIndex = (i + 1) % patrolPoints.Length;
+                    if (patrolPoints[nextIndex] != null)
                     {
-                        int nextIndex = (i + 1) % patrolPoints.Length;
-                        if (patrolPoints[nextIndex] != null)
-                        {
-                            Gizmos.DrawLine(patrolPoints[i].position, patrolPoints[nextIndex].position);
-                        }
+                        Gizmos.DrawLine(patrolPoints[i].position, patrolPoints[nextIndex].position);
                     }
                 }
             }
@@ -419,7 +561,7 @@ namespace Agents.SecurityAgents
             Gizmos.color = Color.green;
             foreach (SecAgent agent in _activeAgents)
             {
-                if (agent.Position != null)
+                if (agent.Position)
                 {
                     DrawVisionCone(agent.Position.position, agent.Position.forward, agent.DetectionRange,
                         visionConeAngle);
@@ -436,6 +578,29 @@ namespace Agents.SecurityAgents
             Gizmos.DrawRay(position, leftBoundary * range);
             Gizmos.DrawRay(position, rightBoundary * range);
             Gizmos.DrawRay(position, forward * range);
+        }
+        
+        
+        private void OnGUI()
+        {
+            if (!showDebugInfo) return;
+
+            GUILayout.BeginArea(new Rect(10, 10, 300, 200));
+            GUILayout.Label($"Active Agents: {_activeAgents.Count}/{maxAgents}");
+            GUILayout.Label($"Agents Paused: {_allAgentsPaused}");
+
+            if (GUILayout.Button("Toggle Pause All"))
+                TogglePauseAllAgents();
+
+            if (GUILayout.Button("Log Statistics"))
+                LogAgentStatistics();
+
+            GUILayout.Label("Controls:");
+            GUILayout.Label($"Pause/Resume: {emergencyStopKey}");
+            GUILayout.Label("Add Agent: +");
+            GUILayout.Label("Remove Agent: -");
+
+            GUILayout.EndArea();
         }
     }
 }

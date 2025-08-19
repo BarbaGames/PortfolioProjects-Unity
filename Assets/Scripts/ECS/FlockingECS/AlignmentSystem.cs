@@ -8,10 +8,10 @@ namespace ECS.FlockingECS
 {
     public class AlignmentSystem : EcsSystem
     {
-        private IDictionary<uint, AcsComponent> ACSComponents = null;
+        private IDictionary<uint, AcsComponent> ACSComponents;
         private List<(TransformComponent transform, AcsComponent acs)> entityData;
-        private IEnumerable<uint> queriedEntities = null;
-        private IDictionary<uint, TransformComponent> transformComponents = null;
+        private IEnumerable<uint> queriedEntities;
+        private IDictionary<uint, TransformComponent> transformComponents;
 
         public override void Initialize()
         {
