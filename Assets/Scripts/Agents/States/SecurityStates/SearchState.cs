@@ -1,25 +1,26 @@
-﻿using System;
+using System;
 using Agents.SecurityAgents;
 using Unity.Mathematics;
 using UnityEngine;
 
 namespace Agents.States.SecurityStates
 {
-    public class PatrolState : State
+    public class SearchState : State
     {
         public override BehaviourActions GetTickBehaviour(params object[] parameters)
         {
             BehaviourActions behaviours = new BehaviourActions();
             Action move = parameters[0] as Action;
             Transform currentNode = parameters[1] as Transform;
-            Transform[] patrolPoints = parameters[2] as Transform[];
+            Transform lastKnownPosition = parameters[2] as Transform;
             Transform target = parameters[3] as Transform;
-            float detectionRange = parameters[4] as float? ?? 0;
-            bool retreat = parameters[5] as bool? ?? false;
+            float searchRadius = parameters[4] as float? ?? 0;
+            float detectionRange = parameters[5] as float? ?? 0;
+            bool retreat = parameters[6] as bool? ?? false;
 
             behaviours.AddMultiThreadableBehaviours(0, () =>
             {
-                if (currentNode == null || patrolPoints == null || patrolPoints.Length == 0) return;
+                if (currentNode == null) return;
 
                 move?.Invoke();
             });
@@ -42,10 +43,14 @@ namespace Agents.States.SecurityStates
                     }
                 }
 
-                if (target == null)
+                if (lastKnownPosition != null && currentNode != null)
                 {
-                    OnFlag?.Invoke(Flags.OnTargetLost);
-                    return;
+                    float searchDistance = math.distance(currentNode.position, lastKnownPosition.position);
+                    if (searchDistance > searchRadius)
+                    {
+                        OnFlag?.Invoke(Flags.OnTargetLost);
+                        return;
+                    }
                 }
             });
 

@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Agents.SecurityAgents;
 
 namespace Agents
 {
@@ -326,7 +327,7 @@ namespace Agents
 
         public void ExecuteBehaviour(BehaviourActions behaviourActions, bool multi = false)
         {
-            if (behaviourActions.Equals(default(BehaviourActions)))
+            if (behaviourActions.Equals(default))
                 return;
 
             int executionOrder = 0;
@@ -427,7 +428,6 @@ namespace Agents
                 return;
             }
 
-            // If only one action, use TryPeek to avoid array allocation.
             if (count == 1)
             {
                 if (actions.TryPeek(out Action singleAction)) singleAction?.Invoke();
@@ -439,7 +439,6 @@ namespace Agents
                 Parallel.For(0, actionsArray.Length, _parallelOptions, i => { actionsArray[i]?.Invoke(); });
             }
 
-            // Remove the executed actions to free references.
             multiThreadables.TryRemove(executionOrder, out _);
         }
 
@@ -501,6 +500,11 @@ namespace Agents
                 IsForce = isForce;
                 Value = value;
             }
+        }
+
+        public void SendInput(Flags flag)
+        {
+            Transition((TEnumFlag)(object)flag);
         }
     }
 }
