@@ -128,7 +128,7 @@ namespace Agents.SecurityAgents
 
         protected virtual void Move()
         {
-            if (_navMeshAgent == null || Position == null) return;
+            if (!_navMeshAgent || !Position) return;
 
             switch (CurrentState)
             {
@@ -337,7 +337,7 @@ namespace Agents.SecurityAgents
             Fsm.SetTransition(Behaviours.Walk, Flags.OnWait, Behaviours.Wait);
             Fsm.SetTransition(Behaviours.Walk, Flags.OnTargetFound, Behaviours.Chase);
             Fsm.SetTransition(Behaviours.Walk, Flags.OnTargetLost, Behaviours.Patrol);
-            Fsm.SetTransition(Behaviours.Walk, Flags.OnTargetReach, Behaviours.Attack);
+            Fsm.SetTransition(Behaviours.Walk, Flags.OnTargetReach, Behaviours.Patrol);
         }
 
         protected virtual void WaitTransitions()

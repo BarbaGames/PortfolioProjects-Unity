@@ -41,12 +41,6 @@ namespace Agents.States.SecurityStates
                         return;
                     }
                 }
-
-                if (!target)
-                {
-                    OnFlag?.Invoke(Flags.OnTargetLost);
-                    return;
-                }
             });
 
             return behaviours;
