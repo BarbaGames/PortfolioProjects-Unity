@@ -20,7 +20,7 @@ namespace Agents.States.SecurityStates
 
             behaviours.AddMultiThreadableBehaviours(0, () =>
             {
-                if (currentNode == null) return;
+                if (!currentNode) return;
 
                 move?.Invoke();
             });
@@ -33,7 +33,7 @@ namespace Agents.States.SecurityStates
                     return;
                 }
 
-                if (target != null && currentNode != null)
+                if (target && currentNode)
                 {
                     float distance = math.distance(currentNode.position, target.position);
                     if (distance <= detectionRange)
@@ -43,7 +43,7 @@ namespace Agents.States.SecurityStates
                     }
                 }
 
-                if (lastKnownPosition != null && currentNode != null)
+                if (lastKnownPosition && currentNode)
                 {
                     float searchDistance = math.distance(currentNode.position, lastKnownPosition.position);
                     if (searchDistance > searchRadius)

@@ -19,14 +19,14 @@ namespace Agents.States.SecurityStates
 
             behaviours.AddMultiThreadableBehaviours(0, () =>
             {
-                if (currentNode == null || target == null) return;
+                if (!currentNode || !target) return;
 
                 move?.Invoke();
             });
 
             behaviours.SetTransitionBehaviour(() =>
             {
-                if (currentNode == null || target == null)
+                if (!currentNode || !target)
                 {
                     OnFlag?.Invoke(Flags.OnTargetLost);
                     return;

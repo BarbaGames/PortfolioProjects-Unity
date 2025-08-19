@@ -29,7 +29,7 @@ namespace Agents.SecurityAgents
         Search
     }
 
-    [System.Serializable]
+    [Serializable]
     public class PatrolPoint
     {
         public Transform transform;
@@ -59,12 +59,10 @@ namespace Agents.SecurityAgents
         public bool Retreat = false;
         public static float deltaTime = 0.1f;
 
-        [Header("Attack Settings")]
-        public float AttackCooldown = 2f;
+        [Header("Attack Settings")] public float AttackCooldown = 2f;
         public float AttackDamage = 10f;
 
-        [Header("Search Settings")]
-        public float SearchDuration = 10f;
+        [Header("Search Settings")] public float SearchDuration = 10f;
         private bool _shouldMove = false;
         private bool _stopRetreating = false;
         private NavMeshAgent _navMeshAgent;
@@ -123,6 +121,7 @@ namespace Agents.SecurityAgents
             Fsm.AddBehaviour<RetreatState>(Behaviours.Retreat, RetreatTickParameters);
             Fsm.AddBehaviour<PatrolState>(Behaviours.Patrol, PatrolTickParameters);
             Fsm.AddBehaviour<SearchState>(Behaviours.Search, SearchTickParameters);
+            Fsm.AddBehaviour<WaitState>(Behaviours.None, WaitTickParameters);
         }
 
 
@@ -196,21 +195,21 @@ namespace Agents.SecurityAgents
 
         private void HandleChaseMovement()
         {
-            if (Target == null) return;
+            if (!Target) return;
             _navMeshAgent.SetDestination(Target.position);
         }
 
         private void HandleRetreatMovement()
         {
-            if (RetreatPoint == null) return;
+            if (!RetreatPoint) return;
             _navMeshAgent.SetDestination(RetreatPoint.position);
         }
 
         private void HandleSearchMovement()
         {
-            if (LastKnownPosition == null)
+            if (!LastKnownPosition)
             {
-                Fsm.SendInput(Flags.OnTargetLost);
+                Fsm.SendInput(Flags.OnRetreat);
                 return;
             }
 

@@ -19,7 +19,7 @@ namespace Agents.States.SecurityStates
 
             behaviours.AddMultiThreadableBehaviours(0, () =>
             {
-                if (currentNode == null || patrolPoints == null || patrolPoints.Length == 0) return;
+                if (!currentNode || patrolPoints == null || patrolPoints.Length == 0) return;
 
                 move?.Invoke();
             });
@@ -32,7 +32,7 @@ namespace Agents.States.SecurityStates
                     return;
                 }
 
-                if (target != null && currentNode != null)
+                if (target && currentNode)
                 {
                     float distance = math.distance(currentNode.position, target.position);
                     if (distance <= detectionRange)
@@ -42,7 +42,7 @@ namespace Agents.States.SecurityStates
                     }
                 }
 
-                if (target == null)
+                if (!target)
                 {
                     OnFlag?.Invoke(Flags.OnTargetLost);
                     return;

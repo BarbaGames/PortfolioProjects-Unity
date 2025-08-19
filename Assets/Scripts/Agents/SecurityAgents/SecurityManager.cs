@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Player;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -28,11 +29,11 @@ namespace Agents.SecurityAgents
         [SerializeField] private int patrolPointsPerAgent = 4;
         [SerializeField] private float minPatrolPointDistance = 5f;
 
-        private Dictionary<SecAgent, GameObject> _agentGameObjects = new Dictionary<SecAgent, GameObject>();
-        private Dictionary<SecAgent, PatrolPoint[]> _agentPatrolPoints = new Dictionary<SecAgent, PatrolPoint[]>();
-        private List<SecAgent> _activeAgents = new List<SecAgent>();
+        private Dictionary<SecAgent, GameObject> _agentGameObjects = new();
+        private Dictionary<SecAgent, PatrolPoint[]> _agentPatrolPoints = new();
+        private List<SecAgent> _activeAgents = new();
         private Transform _currentTarget;
-        private Player.PlayerController _player;
+        private PlayerController _player;
 
         private void Awake()
         {
@@ -48,7 +49,7 @@ namespace Agents.SecurityAgents
 
         private void Start()
         {
-            _player = FindObjectOfType<Player.PlayerController>();
+            _player = Object.FindObjectsByType<PlayerController>(FindObjectsInactive.Include, FindObjectsSortMode.None).FirstOrDefault();
             InitializeAgents();
         }
 
