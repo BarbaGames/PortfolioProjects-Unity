@@ -11,12 +11,7 @@ namespace Agents.States.SecurityStates
         {
             BehaviourActions behaviours = new BehaviourActions();
 
-            SimNode<IVector> currentNode = parameters[0] as SimNode<IVector>;
-            SimNode<IVector> targetNode = parameters[1] as SimNode<IVector>;
-            bool retreat = (bool)parameters[2];
-            Action onMove = parameters[3] as Action;
-            List<SimNode<IVector>> path = parameters[4] as List<SimNode<IVector>>;
-
+            Action onMove = parameters[0] as Action;
 
             behaviours.AddMultiThreadableBehaviours(0, onMove);
 

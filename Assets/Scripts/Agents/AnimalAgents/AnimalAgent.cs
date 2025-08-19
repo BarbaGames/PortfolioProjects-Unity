@@ -1,5 +1,4 @@
 ﻿using System;
-using Agents.States.AnimalStates;
 using Utils;
 
 namespace Agents.AnimalAgents
@@ -144,7 +143,7 @@ namespace Agents.AnimalAgents
 
         protected virtual void FsmBehaviours()
         {
-            Fsm.AddBehaviour<AnimalWalkState>(Behaviours.Walk, WalkTickParameters);
+            //Fsm.AddBehaviour<AnimalWalkState>(Behaviours.Walk, WalkTickParameters);
             ExtraBehaviours();
         }
 

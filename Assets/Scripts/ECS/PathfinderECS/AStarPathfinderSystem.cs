@@ -72,8 +72,7 @@ namespace ECS.PathfinderECS
                 }
                 else
                 {
-                    PathResultComponent<TNodeType> pathResult =
-                        EcsManager.GetComponent<PathResultComponent<TNodeType>>(entityId);
+                    PathResultComponent<TNodeType> pathResult = EcsManager.GetComponent<PathResultComponent<TNodeType>>(entityId);
                     pathResult.Path = path;
                 }
             });
