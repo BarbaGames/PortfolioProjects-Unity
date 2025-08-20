@@ -102,7 +102,7 @@ namespace Agents.SecurityAgents
 
                 // Validate NavMeshAgent
                 NavMeshAgent navAgent = agentObject.GetComponent<NavMeshAgent>();
-                if (navAgent == null)
+                if (!navAgent)
                 {
                     navAgent = agentObject.AddComponent<NavMeshAgent>();
                 }
@@ -164,7 +164,7 @@ namespace Agents.SecurityAgents
                     float alertLevel = 1f - (distanceToNoise / noiseRadius);
 
                     agent.LastKnownPosition = CreateTempTransform(noisePosition);
-
+                    agent.noiseHeard = true;
                     if (agent.CurrentState == Behaviours.Patrol)
                     {
                         agent.Fsm.SendInput(Flags.OnTargetLost);
@@ -198,8 +198,7 @@ namespace Agents.SecurityAgents
                 Debug.Log($"{kvp.Key}: {kvp.Value} agents");
             }
         }
-
-
+        
         private Vector3 GetValidSpawnPosition()
         {
             for (int attempts = 0; attempts < 10; attempts++)
@@ -333,7 +332,7 @@ namespace Agents.SecurityAgents
         private void UpdateAgentsOptimized()
         {
             if (_activeAgents.Count == 0 || _allAgentsPaused) return;
-            
+
             int agentsToUpdate = Mathf.Min(maxAgentsUpdatedPerFrame, _activeAgents.Count);
 
             for (int i = 0; i < agentsToUpdate; i++)
@@ -448,8 +447,7 @@ namespace Agents.SecurityAgents
 
             return !Physics.Raycast(ray, distance, obstacleLayerMask);
         }
-
-
+        
         private Transform CreateTempTransform(Vector3 position)
         {
             GameObject tempObject = new GameObject("TempSearchTarget")
@@ -513,12 +511,22 @@ namespace Agents.SecurityAgents
 
         public GameObject GetAgentGameObject(SecAgent agent)
         {
-            return _agentGameObjects.TryGetValue(agent, out GameObject gameObject) ? gameObject : null;
+            return _agentGameObjects.GetValueOrDefault(agent);
         }
 
         public Vector3[] GetAgentPositions()
         {
             return _activeAgents.Select(agent => agent.Position.position).ToArray();
+        }
+        
+        public bool CheckLineOfSight(Vector3 fromPosition, Vector3 toPosition)
+        {
+            Vector3 direction = toPosition - fromPosition;
+            float distance = direction.magnitude;
+            
+            Ray ray = new Ray(fromPosition + Vector3.up * 0.5f, direction.normalized);
+            
+            return !Physics.Raycast(ray, distance, obstacleLayerMask);
         }
 
         private void OnDestroy()
@@ -537,21 +545,21 @@ namespace Agents.SecurityAgents
             Gizmos.color = Color.yellow;
             Gizmos.DrawWireSphere(transform.position, spawnRadius);
 
-            if (patrolPoints != null && patrolPoints.Length > 1)
+            if (patrolPoints is { Length: > 1 })
             {
                 Gizmos.color = Color.blue;
                 for (int i = 0; i < patrolPoints.Length; i++)
                 {
                     if (!patrolPoints[i]) continue;
                     int nextIndex = (i + 1) % patrolPoints.Length;
-                    if (patrolPoints[nextIndex] != null)
+                    if (patrolPoints[nextIndex])
                     {
                         Gizmos.DrawLine(patrolPoints[i].position, patrolPoints[nextIndex].position);
                     }
                 }
             }
 
-            if (retreatPoint != null)
+            if (retreatPoint)
             {
                 Gizmos.color = Color.red;
                 Gizmos.DrawWireCube(retreatPoint.position, Vector3.one * 2f);
@@ -579,7 +587,6 @@ namespace Agents.SecurityAgents
             Gizmos.DrawRay(position, rightBoundary * range);
             Gizmos.DrawRay(position, forward * range);
         }
-        
         
         private void OnGUI()
         {

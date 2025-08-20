@@ -1,11 +1,10 @@
 using System;
-using System.Collections;
 using Agents.States.SecurityStates;
 using Player;
 using TMPro;
 using UnityEngine;
 using UnityEngine.AI;
-using UnityEngine.UIElements;
+using Random = UnityEngine.Random;
 
 namespace Agents.SecurityAgents
 {
@@ -48,7 +47,7 @@ namespace Agents.SecurityAgents
         public Behaviours CurrentState;
         public Transform Position;
         public Transform Target;
-        
+
         [Header("Patrol Settings")] 
         public float DetectionRange = 10f;
         public float MaxChaseDistance = 20f;
@@ -82,7 +81,7 @@ namespace Agents.SecurityAgents
         protected Action _onMove;
         protected Action _onAttack;
 
-        [Header("Debug Settings")]
+        [Header("Debug Settings")] 
         public bool ShowDebugInfo = true;
         public bool ShowPatrolPath = true;
         public bool ShowVisionCone = true;
@@ -98,9 +97,13 @@ namespace Agents.SecurityAgents
         // State tracking for debugging
         private Behaviours _previousState;
         private float _stateChangeTime;
+        public bool noiseHeard;
 
         public virtual void Init()
         {
+            LastKnownPosition = new GameObject("LastKnownPosition").transform;
+            LastKnownPosition.position = Vector3.zero;
+
             _navMeshAgent = Position.GetComponent<NavMeshAgent>();
             if (!_navMeshAgent)
                 _navMeshAgent = Position.gameObject.AddComponent<NavMeshAgent>();
@@ -123,13 +126,13 @@ namespace Agents.SecurityAgents
             AddFsmBehaviours();
             FsmTransitions();
         }
-        
+
         public virtual void Tick()
         {
             Fsm.Tick();
             UpdateStateDisplay();
         }
-        
+
         public void Reset()
         {
             if (Fsm != null)
@@ -149,13 +152,23 @@ namespace Agents.SecurityAgents
             _searchStartTime = 0f;
             _lastAttackTime = 0f;
         }
-        
+
         private void OnStateChanged(int newState)
         {
             _previousState = CurrentState;
             CurrentState = (Behaviours)Math.Clamp(newState, 0, Enum.GetValues(typeof(Behaviours)).Length);
             _stateChangeTime = Time.time;
-
+        
+            // Clean up LastKnownPosition when exiting Search state
+            if (_previousState == Behaviours.Search && CurrentState == Behaviours.Patrol)
+            {
+                if (LastKnownPosition && LastKnownPosition.name == "LastKnownPosition")
+                {
+                    // Only clear if it's our temporary object, not a real world position
+                    LastKnownPosition.position = Vector3.zero;
+                }
+            }
+        
             if (ShowDebugInfo)
             {
                 Debug.Log($"Agent {Position.name}: {_previousState} -> {CurrentState} at {_stateChangeTime:F2}s");
@@ -218,12 +231,12 @@ namespace Agents.SecurityAgents
         protected virtual void AddFsmBehaviours()
         {
             Fsm.AddBehaviour<WaitState>(Behaviours.Wait, WaitTickParameters);
-            Fsm.AddBehaviour<WalkState>(Behaviours.Walk, WalkTickParameters);
             Fsm.AddBehaviour<ChaseState>(Behaviours.Chase, ChaseTickParameters);
-            Fsm.AddBehaviour<AttackState>(Behaviours.Attack, AttackTickParameters);
-            Fsm.AddBehaviour<RetreatState>(Behaviours.Retreat, RetreatTickParameters);
             Fsm.AddBehaviour<PatrolState>(Behaviours.Patrol, PatrolTickParameters);
-            Fsm.AddBehaviour<SearchState>(Behaviours.Search, SearchTickParameters);
+            Fsm.AddBehaviour<RetreatState>(Behaviours.Retreat, RetreatTickParameters);
+            Fsm.AddBehaviour<AttackState>(Behaviours.Attack, AttackTickParameters);
+            Fsm.AddBehaviour<SearchState>(Behaviours.Search, SearchTickParameters, SearchEnterParameters);
+            Fsm.AddBehaviour<WalkState>(Behaviours.Walk, WalkTickParameters);
             Fsm.AddBehaviour<WaitState>(Behaviours.None, WaitTickParameters);
         }
 
@@ -334,7 +347,7 @@ namespace Agents.SecurityAgents
         {
             if (!LastKnownPosition)
             {
-                Fsm.SendInput(Flags.OnRetreat);
+                Fsm.SendInput(Flags.OnTargetLost);
                 return;
             }
 
@@ -347,7 +360,7 @@ namespace Agents.SecurityAgents
             if (Time.time - _searchStartTime > SearchDuration)
             {
                 _searchStartTime = 0f;
-                LastKnownPosition = null;
+                // Don't null LastKnownPosition here - let the state transition handle cleanup
                 Fsm.SendInput(Flags.OnTargetLost);
                 return;
             }
@@ -355,7 +368,7 @@ namespace Agents.SecurityAgents
             if (!_navMeshAgent.pathPending && _navMeshAgent.remainingDistance < ReachDistance)
             {
                 Vector3 randomSearchPoint =
-                    LastKnownPosition.position + UnityEngine.Random.insideUnitSphere * SearchRadius;
+                    LastKnownPosition.position + Random.insideUnitSphere * SearchRadius;
                 if (NavMesh.SamplePosition(randomSearchPoint, out NavMeshHit hit, SearchRadius, NavMesh.AllAreas))
                 {
                     _navMeshAgent.SetDestination(hit.position);
@@ -368,7 +381,7 @@ namespace Agents.SecurityAgents
             // Default walking behavior - can be customized
             if (!_navMeshAgent.hasPath)
             {
-                Vector3 randomDirection = UnityEngine.Random.insideUnitSphere * 5f;
+                Vector3 randomDirection = Random.insideUnitSphere * 5f;
                 randomDirection += _spawnPosition;
                 if (NavMesh.SamplePosition(randomDirection, out NavMeshHit hit, 5f, NavMesh.AllAreas))
                 {
@@ -378,7 +391,7 @@ namespace Agents.SecurityAgents
         }
 
         #endregion
-        
+
         protected virtual void Attack()
         {
             if (!Target) return;
@@ -407,20 +420,54 @@ namespace Agents.SecurityAgents
 
         #region FsmParams
 
-        private object[] WalkTickParameters()
+        private object[] ChaseTickParameters()
         {
-            return new object[] { _onMove };
+            bool hasLineOfSight = !SecurityManager.Instance ||
+                                  SecurityManager.Instance.CheckLineOfSight(Position.position,
+                                      Target ? Target.position : Vector3.zero);
+
+            return new object[] { _onMove, Position, Target, MaxChaseDistance, ReachDistance, Retreat, hasLineOfSight };
+        }
+
+        private object[] SearchEnterParameters()
+        {
+            return new object[] { !LastKnownPosition ? Vector3.zero : LastKnownPosition.position, DetectionRange };
+        }
+
+        private object[] SearchTickParameters()
+        {
+            bool hasLineOfSight = SecurityManager.Instance && Target &&
+                                  SecurityManager.Instance.CheckLineOfSight(Position.position, Target.position);
+
+            // Ensure LastKnownPosition is not null for parameters
+            Vector3 lastKnownPos = LastKnownPosition ? LastKnownPosition.position : _spawnPosition;
+
+            return new object[] { _onMove, Position, Target, DetectionRange, Retreat, hasLineOfSight, lastKnownPos };
+        }
+
+        private object[] PatrolTickParameters()
+        {
+            bool hasLineOfSight = SecurityManager.Instance && Target &&
+                                  SecurityManager.Instance.CheckLineOfSight(Position.position, Target.position);
+
+            // Safe null handling for LastKnownPosition
+            Vector3? lastKnownPos = LastKnownPosition?.position;
+
+            return new object[]
+            {
+                _onMove, Position, PatrolPoints, Target, DetectionRange, Retreat, hasLineOfSight, noiseHeard,
+                lastKnownPos
+            };
         }
 
         private object[] WaitTickParameters()
         {
-            return new object[] { WaitTime, _shouldMove, Retreat };
+            return new object[] { WaitTime, _shouldMove, Retreat, Position, true };
         }
 
-        private object[] ChaseTickParameters()
+        private object[] WalkTickParameters()
         {
-            object[] parameters = { _onMove, Position, Target, MaxChaseDistance, ReachDistance, Retreat };
-            return parameters;
+            return new object[] { _onMove };
         }
 
         private object[] AttackTickParameters()
@@ -431,16 +478,6 @@ namespace Agents.SecurityAgents
         private object[] RetreatTickParameters()
         {
             return new object[] { _onMove, Position, RetreatPoint, SafeDistance, _stopRetreating };
-        }
-
-        private object[] PatrolTickParameters()
-        {
-            return new object[] { _onMove, Position, PatrolPoints, Target, DetectionRange, Retreat };
-        }
-
-        private object[] SearchTickParameters()
-        {
-            return new object[] { _onMove, Position, LastKnownPosition, Target, SearchRadius, DetectionRange, Retreat };
         }
 
         #endregion

@@ -7,6 +7,9 @@ namespace Agents.States.SecurityStates
 {
     public class ChaseState : State
     {
+        private float _lastVisualContactTime;
+        private float _visualLossGracePeriod = 2f;
+
         public override BehaviourActions GetTickBehaviour(params object[] parameters)
         {
             BehaviourActions behaviours = new BehaviourActions();
@@ -16,11 +19,12 @@ namespace Agents.States.SecurityStates
             float maxChaseDistance = parameters[3] as float? ?? 0;
             float reachDistance = parameters[4] as float? ?? 0;
             bool retreat = parameters[5] as bool? ?? false;
+            // Add line of sight check parameter
+            bool hasLineOfSight = parameters.Length <= 6 || (bool)parameters[6];
 
             behaviours.AddMultiThreadableBehaviours(0, () =>
             {
                 if (!currentNode || !target) return;
-
                 move?.Invoke();
             });
 
@@ -40,6 +44,19 @@ namespace Agents.States.SecurityStates
 
                 float distance = math.distance(currentNode.position, target.position);
 
+                if (hasLineOfSight)
+                {
+                    _lastVisualContactTime = Time.time;
+                }
+
+                // Check if we've lost visual contact for too long
+                if (!hasLineOfSight && Time.time - _lastVisualContactTime > _visualLossGracePeriod)
+                {
+                    OnFlag?.Invoke(Flags.OnTargetLost);
+                    return;
+                }
+
+                // Distance checks
                 if (distance > maxChaseDistance)
                 {
                     OnFlag?.Invoke(Flags.OnTargetLost);
@@ -58,7 +75,14 @@ namespace Agents.States.SecurityStates
 
         public override BehaviourActions GetOnEnterBehaviour(params object[] parameters)
         {
-            return default;
+            BehaviourActions behaviours = new BehaviourActions();
+
+            behaviours.AddMultiThreadableBehaviours(0, () =>
+            {
+                _lastVisualContactTime = Time.time;
+            });
+
+            return behaviours;
         }
 
         public override BehaviourActions GetOnExitBehaviour(params object[] parameters)
