@@ -1655,13 +1655,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 330585543}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.37386242, y: 0.60102904, z: -0.37532395, w: 0.5984338}
-  m_LocalPosition: {x: -21.474257, y: 34.104874, z: -3.2734468}
+  m_LocalRotation: {x: 0.5893374, y: 0, z: 0, w: 0.807887}
+  m_LocalPosition: {x: -5.1727996, y: 38.43596, z: -15.174922}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 72.22, y: 0, z: 0}
 --- !u!114 &330585547
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9921,6 +9921,7 @@ MonoBehaviour:
   patrolPointsPerAgent: 3
   minPatrolPointDistance: 5
   showDebugInfo: 1
+  showAgentsDebugInfo: 1
   autoSpawnAgents: 1
   pauseAllAgents: 0
   emergencyStopKey: 112

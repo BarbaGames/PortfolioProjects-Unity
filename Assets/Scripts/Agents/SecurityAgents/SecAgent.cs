@@ -82,7 +82,7 @@ namespace Agents.SecurityAgents
         protected Action _onAttack;
 
         [Header("Debug Settings")] 
-        public bool ShowDebugInfo = true;
+        public static bool ShowDebugInfo = true;
         public bool ShowPatrolPath = true;
         public bool ShowVisionCone = true;
 

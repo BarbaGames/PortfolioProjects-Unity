@@ -1,8 +1,10 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Player;
 using UnityEngine;
 using UnityEngine.AI;
+using Random = UnityEngine.Random;
 
 namespace Agents.SecurityAgents
 {
@@ -31,6 +33,7 @@ namespace Agents.SecurityAgents
 
         [Header("Debug & Quality of Life")] 
         [SerializeField] private bool showDebugInfo = true;
+        [SerializeField] private bool showAgentsDebugInfo = true;
         [SerializeField] private bool autoSpawnAgents = true;
         [SerializeField] private bool pauseAllAgents = false;
         [SerializeField] private KeyCode emergencyStopKey = KeyCode.P;
@@ -77,6 +80,11 @@ namespace Agents.SecurityAgents
             UpdatePerformanceMetrics();
         }
 
+        private void OnValidate()
+        {
+            SecAgent.ShowDebugInfo = showAgentsDebugInfo;
+        }
+
         private void InitializeAgents()
         {
             for (int i = 0; i < maxAgents; i++)
@@ -114,7 +122,6 @@ namespace Agents.SecurityAgents
                     AttackRange = globalAttackRange,
                     SearchRadius = globalSearchRadius,
                     RetreatPoint = retreatPoint,
-                    ShowDebugInfo = showDebugInfo
                 };
 
                 // Generate and assign patrol points
@@ -458,30 +465,6 @@ namespace Agents.SecurityAgents
                 }
             };
             return tempObject.transform;
-        }
-
-        public void AddAgent(Vector3 position)
-        {
-            if (_activeAgents.Count >= maxAgents) return;
-
-            GameObject agentObject = Instantiate(secAgentPrefab, position, Quaternion.identity, transform);
-            agentObject.name = $"SecurityAgent_{_activeAgents.Count}";
-
-            SecAgent agent = new SecAgent
-            {
-                Position = agentObject.transform,
-                DetectionRange = globalDetectionRange,
-                AttackRange = globalAttackRange,
-                SearchRadius = globalSearchRadius,
-                PatrolPoints = patrolPoints,
-                RetreatPoint = retreatPoint
-            };
-
-            agent.Init();
-            agent.Fsm.ForceTransition(Behaviours.Patrol);
-
-            _agentGameObjects[agent] = agentObject;
-            _activeAgents.Add(agent);
         }
 
         public void RemoveAgent(SecAgent agent)
